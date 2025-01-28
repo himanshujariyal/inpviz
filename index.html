@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>INP Attribution Data: Timeline View</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex; /* two-column layout using flexbox */
+      flex-direction: row;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Left pane: input + timeline */
+    #leftPane {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      border-right: 1px solid #ccc;
+    }
+
+    /* Right pane: list of saved JSONs (GUID) */
+    #rightPane {
+      width: 300px;
+      padding: 20px;
+      overflow-y: auto;
+      background: #f9f9f9;
+    }
+
+    h1, h2, h3 {
+      margin: 0 0 10px 0;
+      font-weight: normal;
+    }
+
+    #inputArea {
+      width: 100%;
+      height: 100px;
+    }
+    #visualizeBtn {
+      margin: 5px 0;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    #timelineContainer {
+      position: relative;
+      width: 100%;
+      border: 1px solid #ccc;
+      overflow: hidden;
+      min-height: 300px;
+      margin-top: 10px;
+    }
+    #omittedTimestamps {
+      margin-top: 20px;
+      padding: 10px;
+      background: #f8f8f8;
+      border: 1px solid #ddd;
+    }
+    #legendContainer {
+      margin-top: 20px;
+      padding: 10px;
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+    }
+    .legendRow {
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+    .legendBox {
+      width: 20px;
+      height: 20px;
+      display: inline-block;
+      margin-right: 8px;
+      border-radius: 3px;
+      vertical-align: middle;
+    }
+    .legendLine {
+      width: 30px;
+      height: 2px;
+      display: inline-block;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .legendLabel {
+      font-size: 14px;
+      color: #444;
+    }
+    .eventBar {
+      position: absolute;
+      height: 20px;
+      background: steelblue;
+      border-radius: 3px;
+    }
+    .scriptBar {
+      position: absolute;
+      height: 20px;
+      background: green;
+      border-radius: 3px;
+    }
+    .eventInfoLabel {
+      position: absolute;
+      background: #fff;
+      color: #444;
+      font-size: 12px;
+      padding: 2px 5px;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+    .markerLine {
+      position: absolute;
+      width: 2px;
+      background: red;
+    }
+    .markerLabelSingleRow {
+      position: absolute;
+      color: #666;
+      font-size: 12px;
+      background: #fafafa;
+      padding: 2px 4px;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+    .frameBoundaryLine {
+      position: absolute;
+      width: 2px;
+      background: blue;
+    }
+    .frameBoundaryLabelRow {
+      position: absolute;
+      color: #666;
+      font-size: 12px;
+      background: #eef;
+      padding: 2px 4px;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+    .globalInfoTable {
+      position: absolute;
+      background: #fffae6;
+      border: 1px solid #ddd;
+      border-radius: 3px;
+      padding: 5px;
+      font-size: 14px;
+    }
+    .globalInfoTable td {
+      padding: 4px 8px;
+    }
+    .globalInfoKey {
+      color: #666;
+      font-weight: bold;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .globalInfoValue {
+      color: #222;
+      padding-left: 10px;
+      white-space: nowrap;
+    }
+    .globalBlackLine {
+      position: absolute;
+      width: 2px;
+      background: black;
+    }
+    .globalBlackLabel {
+      position: absolute;
+      color: #222;
+      font-size: 12px;
+      background: #e8e8e8;
+      padding: 2px 4px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      white-space: nowrap;
+      font-weight: normal;
+    }
+
+    /* Right pane listing saved items */
+    #savedItems {
+      list-style-type: none;
+      padding: 0;
+      margin: 0;
+      border-top: 1px solid #ccc;
+      margin-top: 10px;
+    }
+    #savedItems li {
+      padding: 6px 8px;
+      border-bottom: 1px solid #ddd;
+      cursor: pointer;
+    }
+    #savedItems li:hover {
+      background: #eee;
+    }
+  </style>
+</head>
+<body>
+
+<!-- LEFT Pane: Input + Visualization -->
+<div id="leftPane">
+  <h1>LoAF &amp; JS Timeline (Two-Column + LocalStorage)</h1>
+  <textarea id="inputArea" placeholder="Paste your JSON here"></textarea><br>
+  <button id="visualizeBtn">Visualize</button>
+
+  <div id="timelineContainer"></div>
+  <div id="omittedTimestamps"></div>
+
+  <div id="legendContainer">
+    <h3>Legend</h3>
+    <div class="legendRow">
+      <span class="legendBox" style="background: steelblue;"></span>
+      <span class="legendLabel">LoAF (blue box) - duration in box</span>
+    </div>
+    <div class="legendRow">
+      <span class="legendBox" style="background: green;"></span>
+      <span class="legendLabel">JS Script (green box) - duration in box</span>
+    </div>
+    <div class="legendRow">
+      <span class="legendLine" style="background: blue;"></span>
+      <span class="legendLabel">Frame Boundary (blue line)</span>
+    </div>
+    <div class="legendRow">
+      <span class="legendLine" style="background: red;"></span>
+      <span class="legendLabel">Marker (red line)</span>
+    </div>
+    <div class="legendRow">
+      <span class="legendLine" style="background: black;"></span>
+      <span class="legendLabel">Global Timestamps (black line)</span>
+    </div>
+  </div>
+</div>
+
+<!-- RIGHT Pane: Saved JSON list -->
+<div id="rightPane">
+  <h2>Saved Data</h2>
+  <ul id="savedItems"></ul>
+</div>
+
+<script>
+document.getElementById('visualizeBtn').addEventListener('click', () => {
+  const raw = document.getElementById('inputArea').value.trim();
+  if (!raw) {
+    alert('Please paste JSON data!');
+    return;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    alert('Invalid JSON!');
+    return;
+  }
+  if (!parsed.P || !parsed.P.INP || !parsed.P.INP.longAnimationFrameEntries) {
+    alert('Missing "data.P.INP.longAnimationFrameEntries" in JSON!');
+    return;
+  }
+
+  // Save in localStorage with a 6-digit ID
+  const guid6 = generate6DigitGUID();
+  localStorage.setItem("timeline_" + guid6, raw);
+
+  // Refresh the list
+  refreshSavedList();
+
+  // Visualize
+  visualizeData(parsed);
+});
+
+/** Generate a random 6-digit ID as string */
+function generate6DigitGUID() {
+  return Math.floor(Math.random() * 900000 + 100000).toString();
+}
+
+/** Refresh saved items list from localStorage */
+function refreshSavedList() {
+  const savedItemsUL = document.getElementById('savedItems');
+  savedItemsUL.innerHTML = '';
+
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key.startsWith("timeline_")) {
+      const guid = key.replace("timeline_", "");
+      const li = document.createElement('li');
+      li.textContent = guid;
+      li.addEventListener('click', () => {
+        const rawData = localStorage.getItem("timeline_" + guid);
+        if (!rawData) return;
+        try {
+          const parsedData = JSON.parse(rawData);
+          document.getElementById('inputArea').value = rawData;
+          visualizeData(parsedData);
+        } catch(e) {
+          alert("Cannot parse JSON from localStorage for " + guid);
+        }
+      });
+      savedItemsUL.appendChild(li);
+    }
+  }
+}
+refreshSavedList();
+
+/** Main visualize function */
+function visualizeData(data) {
+  const timeline = document.getElementById('timelineContainer');
+  timeline.innerHTML = '';
+  document.getElementById('omittedTimestamps').innerHTML = '';
+
+  const omittedTimestamps = [];
+  function omitTime(label, time) {
+    omittedTimestamps.push(`${label} = ${time}`);
+  }
+
+  const inp = data.P.INP || {};
+  let framesRaw = inp.longAnimationFrameEntries || [];
+
+  // Sort
+  framesRaw.sort((a, b) => {
+    const sa = parseFloat(a.startTime) || 0;
+    const sb = parseFloat(b.startTime) || 0;
+    return sa - sb;
+  });
+
+  const inpValue           = inp.value || 'N/A';
+  const interactionTarget  = inp.interactionTarget || 'N/A';
+  const iTimeRaw           = parseFloat(inp.interactionTime) || 0;
+  const nPaintTimeRaw      = parseFloat(inp.nextPaintTime)   || 0;
+  const inputDelay         = inp.inputDelay         || 'N/A';
+  const processingDuration = inp.processingDuration || 'N/A';
+  const presentationDelay  = inp.presentationDelay  || 'N/A';
+
+  let currentRowIndex = 0;
+  const ROW_HEIGHT = 30;
+
+  // top row #0 => table
+  addGlobalInfoTable([
+    ['INPValue', inpValue],
+    ['Interaction Target', interactionTarget]
+  ], currentRowIndex);
+  currentRowIndex += 3;
+
+  // top row #1 => table
+  addGlobalInfoTable([
+    ['inputDelay', inputDelay],
+    ['processingDuration', processingDuration],
+    ['presentationDelay', presentationDelay]
+  ], currentRowIndex);
+  currentRowIndex += 4;
+
+  const blackLineRow = currentRowIndex;
+  currentRowIndex++;
+
+  // find min/max
+  let minTime = Number.POSITIVE_INFINITY;
+  let maxTime = Number.NEGATIVE_INFINITY;
+
+  // parse frames
+  const frames = framesRaw.map(frame => {
+    let frameName = frame.name || 'long-animation-frame';
+    if (frameName === 'long-animation-frame') frameName = 'LoAF';
+
+    const startTime = parseFloat(frame.startTime) || 0;
+    const duration  = parseFloat(frame.duration)  || 0;
+    const endTime   = startTime + duration;
+
+    const markers = [
+      { label: 'renderStart',         value: parseFloat(frame.renderStart) },
+      { label: 'styleAndLayoutStart', value: parseFloat(frame.styleAndLayoutStart) },
+      { label: 'firstUIEvent',        value: parseFloat(frame.firstUIEventTimestamp) }
+    ].filter(m => !isNaN(m.value));
+
+    const scripts = (Array.isArray(frame.scripts) ? frame.scripts : []).map(scr => {
+      let scrName = scr.name || 'script';
+      if (scrName === 'script') scrName = 'JS';
+      const sStart = parseFloat(scr.startTime) || 0;
+      const sDur   = parseFloat(scr.duration)  || 0;
+      const sEnd   = sStart + sDur;
+      if (sStart > 0 && sStart < minTime) minTime = sStart;
+      if (sEnd   > 0 && sEnd   > maxTime) maxTime = sEnd;
+      return { name: scrName, start: sStart, end: sEnd };
+    });
+
+    if (startTime > 0 && startTime < minTime) minTime = startTime;
+    if (endTime   > 0 && endTime   > maxTime) maxTime = endTime;
+    markers.forEach(m => {
+      if (m.value > 0 && m.value < minTime) minTime = m.value;
+      if (m.value > maxTime) maxTime = m.value;
+    });
+
+    return { frameName, start: startTime, end: endTime, markers, scripts };
+  });
+
+  let interactionTime = iTimeRaw;
+  let nextPaintTime   = nPaintTimeRaw;
+  if (interactionTime > 0) {
+    if (interactionTime < minTime) minTime = interactionTime;
+    if (interactionTime > maxTime) maxTime = interactionTime;
+  }
+  if (nextPaintTime > 0) {
+    if (nextPaintTime < minTime) minTime = nextPaintTime;
+    if (nextPaintTime > maxTime) maxTime = nextPaintTime;
+  }
+
+  if (maxTime - minTime < 10) {
+    maxTime = minTime + 10;
+  }
+  const BUFFER = 50;
+  maxTime += BUFFER;
+
+  const STRETCH_FACTOR = 2;
+  // define scale function (for local usage) 
+  const scale = (time) => {
+    if (time === 0) return 0;
+    const ratio = (time - minTime) / (maxTime - minTime);
+    const containerWidth = timeline.clientWidth;
+    return ratio * containerWidth * (1 / STRETCH_FACTOR) + ratio * 300;
+  };
+
+  const framesRowInfo = [];
+  frames.forEach(frameData => {
+    const startTime = frameData.start;
+    const endTime   = frameData.end;
+    const markers   = frameData.markers;
+
+    const boundaryLabelRow = currentRowIndex;
+    currentRowIndex++;
+
+    const markerRowIndices = [];
+    markers.forEach(() => {
+      markerRowIndices.push(currentRowIndex);
+      currentRowIndex++;
+    });
+
+    const eventsInFrame = [];
+    eventsInFrame.push({
+      name: frameData.frameName,
+      start: startTime,
+      end:   endTime,
+      isScript: (frameData.frameName === 'JS')
+    });
+    frameData.scripts.forEach(scr => {
+      eventsInFrame.push({
+        name: scr.name,
+        start: scr.start,
+        end:   scr.end,
+        isScript: (scr.name === 'JS')
+      });
+    });
+
+    const eventRows = eventsInFrame.map(evt => {
+      const barRow   = currentRowIndex++;
+      const labelRow = currentRowIndex++;
+      return { evt, barRow, labelRow };
+    });
+
+    const frameTopRow    = boundaryLabelRow;
+    const frameBottomRow = currentRowIndex - 1;
+
+    framesRowInfo.push({
+      start: startTime,
+      end:   endTime,
+      markers,
+      boundaryLabelRow,
+      markerRowIndices,
+      events: eventRows,
+      topRow: frameTopRow,
+      bottomRow: frameBottomRow,
+      frameName: frameData.frameName
+    });
+  });
+
+  const totalRowsUsed = currentRowIndex;
+  const totalHeightPx = totalRowsUsed * ROW_HEIGHT;
+  timeline.style.height = totalHeightPx + 'px';
+
+  // black lines row
+  const globalTimestampTopPx = blackLineRow * ROW_HEIGHT;
+  const globalTimestampBottomPx = totalHeightPx;
+
+  if (interactionTime === 0) {
+    omitTime('interactionTime', 0);
+  } else {
+    drawGlobalBlackLine(interactionTime, 'interactionTime', globalTimestampTopPx, globalTimestampBottomPx, scale);
+  }
+  if (nextPaintTime === 0) {
+    omitTime('nextPaintTime', 0);
+  } else {
+    drawGlobalBlackLine(nextPaintTime, 'nextPaintTime', globalTimestampTopPx, globalTimestampBottomPx, scale);
+  }
+
+  framesRowInfo.forEach(info => {
+    const frameTopPx    = info.topRow * ROW_HEIGHT;
+    const frameBottomPx = (info.bottomRow + 1) * ROW_HEIGHT;
+
+    if (info.start === 0) {
+      omitTime(`${info.frameName}.startTime`, 0);
+    } else {
+      drawVerticalLine(info.start, 'blue', frameTopPx, frameBottomPx, scale);
+      addBoundaryLabel(info.start, `${info.start.toFixed(1)}ms`, info.boundaryLabelRow, `${info.frameName}.startTime`, scale);
+    }
+    if (info.end === 0) {
+      omitTime(`${info.frameName}.endTime`, 0);
+    } else {
+      drawVerticalLine(info.end, 'blue', frameTopPx, frameBottomPx, scale);
+      addBoundaryLabel(info.end, `${info.end.toFixed(1)}ms`, info.boundaryLabelRow, `${info.frameName}.endTime`, scale);
+    }
+
+    info.markers.forEach((marker, idx) => {
+      const rowIndex = info.markerRowIndices[idx];
+      const rowTopPx = rowIndex * ROW_HEIGHT;
+      if (marker.value === 0) {
+        omitTime(`Marker:${marker.label}`, 0);
+      } else {
+        drawVerticalLine(marker.value, 'red', frameTopPx, frameBottomPx, scale);
+        addMarkerLabel(marker.value, `${marker.label} (${marker.value.toFixed(1)}ms)`, rowTopPx, scale);
+      }
+    });
+
+    info.events.forEach(({ evt, barRow, labelRow }) => {
+      const durationVal = evt.end - evt.start;
+      if (evt.start === 0 && evt.end === 0) {
+        omitTime(`${evt.name} eventStartEnd`, 0);
+      } else if (evt.start === 0) {
+        omitTime(`${evt.name} eventStart`, 0);
+      } else if (evt.end === 0) {
+        omitTime(`${evt.name} eventEnd`, 0);
+      } else {
+        const barTop   = barRow * ROW_HEIGHT;
+        const barLeft  = scale(evt.start);
+        const barWidth = Math.max(30, scale(evt.end) - barLeft);
+
+        const barDiv = document.createElement('div');
+        barDiv.className = evt.isScript ? 'scriptBar' : 'eventBar';
+        barDiv.style.top   = barTop + 'px';
+        barDiv.style.left  = barLeft + 'px';
+        barDiv.style.width = barWidth + 'px';
+
+        if (barWidth >= 30 && durationVal > 0) {
+          barDiv.textContent = durationVal.toFixed(0);
+          barDiv.style.color = "#fff";
+          barDiv.style.textAlign = "center";
+          barDiv.style.lineHeight = "20px";
+          barDiv.style.overflow = "hidden";
+        }
+        timeline.appendChild(barDiv);
+      }
+
+      // label
+      const lblTop = labelRow * ROW_HEIGHT;
+      const lblDiv = document.createElement('div');
+      lblDiv.className = 'eventInfoLabel';
+      lblDiv.style.top  = lblTop + 'px';
+      const anchorLeft  = evt.start === 0 ? 0 : scale(evt.start);
+      lblDiv.style.left = anchorLeft + 'px';
+      lblDiv.textContent = `${evt.name} (${evt.start.toFixed(1)} - ${evt.end.toFixed(1)})`;
+      timeline.appendChild(lblDiv);
+    });
+  });
+
+  if (omittedTimestamps.length > 0) {
+    const bottomDiv = document.getElementById('omittedTimestamps');
+    bottomDiv.innerHTML = '<h3>Omitted Zero Timestamps</h3>';
+    const list = document.createElement('ul');
+    omittedTimestamps.forEach(item => {
+      const li = document.createElement('li');
+      li.textContent = item;
+      list.appendChild(li);
+    });
+    bottomDiv.appendChild(list);
+  }
+
+  // ---------------- HELPER Functions that accept scale as param ----------------
+  function drawVerticalLine(time, color, topPx, bottomPx, scaleFn) {
+    if (time === 0) return;
+    const xPos = scaleFn(time);
+    const line = document.createElement('div');
+    line.style.position = 'absolute';
+    line.style.background = color;
+    line.style.left = xPos + 'px';
+    line.style.top  = topPx + 'px';
+    line.style.width = '2px';
+    line.style.height = (bottomPx - topPx) + 'px';
+    if (color === 'blue') line.className = 'frameBoundaryLine';
+    else if (color === 'red') line.className = 'markerLine';
+    timeline.appendChild(line);
+  }
+
+  function drawGlobalBlackLine(time, labelText, topPx, bottomPx, scaleFn) {
+    if (time === 0) return;
+    const xPos = scaleFn(time);
+    const line = document.createElement('div');
+    line.className = 'globalBlackLine';
+    line.style.left = xPos + 'px';
+    line.style.top  = topPx + 'px';
+    line.style.height = (bottomPx - topPx) + 'px';
+    timeline.appendChild(line);
+
+    const labelY = topPx + 5;
+    const label = document.createElement('div');
+    label.className = 'globalBlackLabel';
+    label.style.left = (xPos + 5) + 'px';
+    label.style.top  = labelY + 'px';
+    label.textContent = `${labelText} (${time.toFixed(1)}ms)`;
+    timeline.appendChild(label);
+  }
+
+  function addBoundaryLabel(time, text, boundaryRow, note, scaleFn) {
+    if (time === 0) {
+      omitTime(note, 0);
+      return;
+    }
+    const xPos = scaleFn(time);
+    const labelTop = boundaryRow * ROW_HEIGHT + 5;
+    const label = document.createElement('div');
+    label.className = 'frameBoundaryLabelRow';
+    label.style.left = (xPos + 5) + 'px';
+    label.style.top  = labelTop + 'px';
+    label.textContent = text;
+    timeline.appendChild(label);
+  }
+
+  function addMarkerLabel(time, text, rowPxTop, scaleFn) {
+    if (time === 0) {
+      omitTime('marker', 0);
+      return;
+    }
+    const xPos = scaleFn(time);
+    const labelTop = rowPxTop + 5;
+    const label = document.createElement('div');
+    label.className = 'markerLabelSingleRow';
+    label.style.left = (xPos + 5) + 'px';
+    label.style.top  = labelTop + 'px';
+    label.textContent = text;
+    timeline.appendChild(label);
+  }
+
+  function addGlobalInfoTable(pairs, rowIndex) {
+    const tableTop  = rowIndex * ROW_HEIGHT + 5;
+    const tableLeft = 10;
+
+    const table = document.createElement('table');
+    table.className = 'globalInfoTable';
+    table.style.position = 'absolute';
+    table.style.top  = tableTop + 'px';
+    table.style.left = tableLeft + 'px';
+
+    pairs.forEach(([k, v]) => {
+      const tr = document.createElement('tr');
+      const tdKey = document.createElement('td');
+      tdKey.className = 'globalInfoKey';
+      tdKey.textContent = k + ':';
+      const tdVal = document.createElement('td');
+      tdVal.className = 'globalInfoValue';
+      tdVal.textContent = v;
+      tr.appendChild(tdKey);
+      tr.appendChild(tdVal);
+      table.appendChild(tr);
+    });
+    timeline.appendChild(table);
+  }
+}
+</script>
+</body>
+</html>
